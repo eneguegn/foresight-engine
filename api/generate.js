@@ -9,6 +9,8 @@ export default async function handler(req) {
   }
 
   const body = await req.text();
+  const parsed = JSON.parse(body);
+  parsed.stream = true;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -17,15 +19,14 @@ export default async function handler(req) {
       'anthropic-version': '2023-06-01',
       'x-api-key': process.env.ANTHROPIC_API_KEY,
     },
-    body,
+    body: JSON.stringify(parsed),
   });
 
-  // Stream the Anthropic response directly back to the browser
   return new Response(response.body, {
     status: response.status,
     headers: {
-      'Content-Type': 'application/json',
-      'Transfer-Encoding': 'chunked',
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
     },
   });
 }

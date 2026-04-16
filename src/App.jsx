@@ -275,60 +275,86 @@ export default function App() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAnswer(); }
   };
 
-  const generateReport = async () => {
-    setPhase("generating");
-    setProgress(0);
-    setReport(""); setShowExport(false);
-    streamRef.current = "";
+const generateReport = async () => {
+  setPhase("generating");
+  setProgress(0);
+  setReport(""); setShowExport(false);
+  streamRef.current = "";
 
-    // Animate progress bar while waiting for the response
-    const iv = setInterval(() => setProgress(p => Math.min(p + Math.random() * 2.5, 92)), 800);
+  const iv = setInterval(() => setProgress(p => Math.min(p + Math.random() * 2.5, 92)), 800);
 
-    // Abort if no response within 90 seconds
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
 
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 2000,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: "user", content: buildUserPrompt(answers) }],
-        }),
-      });
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 4000,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: buildUserPrompt(answers) }],
+      }),
+    });
 
-      clearTimeout(timeout);
-      clearInterval(iv);
+    clearTimeout(timeout);
+    clearInterval(iv);
 
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`API error ${res.status}: ${errText}`);
-      }
-
-      const data = await res.json();
-      const text = data?.content?.find(b => b.type === "text")?.text;
-      if (!text) throw new Error("No text content in response. Please try again.");
-
-      setProgress(100);
-      setReport(text);
-      setPhase("report");
-      setTimeout(() => setShowExport(true), 600);
-
-    } catch (err) {
-      clearTimeout(timeout);
-      clearInterval(iv);
-      if (err.name === "AbortError") {
-        setError("The request timed out. Try a shorter report (5–10 pages) or tap 'Try Again'.");
-      } else {
-        setError(err.message);
-      }
-      setPhase("error");
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`API error ${res.status}: ${errText}`);
     }
-  };
+
+    // Switch to report view and stream in text as it arrives
+    setProgress(100);
+    setPhase("report");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let sseBuffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      sseBuffer += decoder.decode(value, { stream: true });
+      const lines = sseBuffer.split("\n");
+      sseBuffer = lines.pop();
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === "[DONE]") continue;
+        try {
+          const evt = JSON.parse(payload);
+          if (
+            evt.type === "content_block_delta" &&
+            evt.delta?.type === "text_delta" &&
+            evt.delta?.text
+          ) {
+            streamRef.current += evt.delta.text;
+            setReport(streamRef.current);
+          }
+        } catch { /* skip malformed lines */ }
+      }
+    }
+
+    setTimeout(() => setShowExport(true), 600);
+
+  } catch (err) {
+    clearTimeout(timeout);
+    clearInterval(iv);
+    if (err.name === "AbortError") {
+      setError("The request timed out. Please try again.");
+    } else {
+      setError(err.message);
+    }
+    setPhase("error");
+  }
+};
 
   const restart = () => {
     setPhase("intro"); setCurrentQ(0); setAnswers({});
@@ -519,6 +545,8 @@ export default function App() {
         .report-body td{padding:8px 11px;border-bottom:1px solid rgba(0,0,0,0.055);vertical-align:top;line-height:1.5;color:var(--text)}
         .report-body tr:nth-child(even) td{background:rgba(13,27,62,0.022)}
         .report-body tr:last-child td{border-bottom:none}
+@keyframes blink{50%{opacity:0}}
+.streaming-cursor{display:inline-block;width:7px;height:15px;background:var(--navy);border-radius:1px;animation:blink .8s step-end infinite;vertical-align:text-bottom;margin-left:2px}
         /* EXPORT PANEL */
         .export-panel{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(13,27,62,0.98) 0%,rgba(13,27,62,0.95) 100%);border-top:1px solid rgba(200,168,75,0.22);backdrop-filter:blur(16px);z-index:50;animation:slideUp .4s cubic-bezier(.16,1,.3,1) both}
         @keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
@@ -691,7 +719,7 @@ export default function App() {
               </div>
               <div className="report-scroll">
                 <div className="report-body" dangerouslySetInnerHTML={{
-                  __html: renderMarkdown(displayText)
+                  __html: renderMarkdown(displayText) + (showExport ? "" : '<span class="streaming-cursor"></span>')
                 }} />
               </div>
               {showExport && (
