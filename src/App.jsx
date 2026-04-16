@@ -178,8 +178,49 @@ function renderMarkdown(text) {
   return html;
 }
 
-function ExportPanel({ reportText, onDismiss }) {
+function ExportPanel({ reportText, answers, onDismiss }) {
+  const [docxLoading, setDocxLoading] = useState(false);
+  const [pptxLoading, setPptxLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [exportError, setExportError] = useState("");
+
+  const handleExport = async (endpoint, filename, mimeType, setLoading) => {
+    setLoading(true);
+    setExportError("");
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ report: reportText, topic: answers.topic, region: answers.region }),
+      });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = new Blob([await res.arrayBuffer()], { type: mimeType });
+      const file = new File([blob], filename, { type: mimeType });
+
+      // Use Web Share API on iOS (best experience), fallback to new tab
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: filename });
+      } else {
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      }
+    } catch (err) {
+      if (err.name !== "AbortError") setExportError(err.message);
+    }
+    setLoading(false);
+  };
+
+  const handleDocx = () => handleExport(
+    "/api/generate-docx", "foresight-report.docx",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    setDocxLoading
+  );
+  const handlePptx = () => handleExport(
+    "/api/generate-pptx", "foresight-report.pptx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    setPptxLoading
+  );
   const handleCopy = () => {
     navigator.clipboard.writeText(reportText);
     setCopied(true);
@@ -193,32 +234,27 @@ function ExportPanel({ reportText, onDismiss }) {
           <div className="export-icon">✦</div>
           <div>
             <div className="export-title">Your report is complete</div>
-            <div className="export-sub">Would you like it as a formatted file?</div>
+            <div className="export-sub">Export as a formatted file</div>
           </div>
         </div>
+
+        {exportError && <div className="export-error">{exportError}</div>}
 
         <div className="export-options">
-          <div className="export-option">
-            <div className="export-option-icon">📄</div>
+          <button className="export-option-btn" onClick={handleDocx} disabled={docxLoading || pptxLoading}>
+            <div className="export-option-icon">{docxLoading ? "⏳" : "📄"}</div>
             <div className="export-option-body">
               <div className="export-option-label">Word Document (.docx)</div>
-              <div className="export-option-desc">Colour-coded scenario sections, comparison table, annex styling, and a professional title page.</div>
+              <div className="export-option-desc">{docxLoading ? "Generating — this takes a few seconds…" : "Colour-coded scenario sections, comparison table, and annex styling."}</div>
             </div>
-          </div>
-          <div className="export-option">
-            <div className="export-option-icon">📊</div>
+          </button>
+          <button className="export-option-btn" onClick={handlePptx} disabled={docxLoading || pptxLoading}>
+            <div className="export-option-icon">{pptxLoading ? "⏳" : "📊"}</div>
             <div className="export-option-body">
               <div className="export-option-label">PowerPoint Deck (.pptx)</div>
-              <div className="export-option-desc">Executive slide deck — scenario framework, region in focus, and strategic bets, ready to present.</div>
+              <div className="export-option-desc">{pptxLoading ? "Generating — this takes a few seconds…" : "7-slide executive deck — scenarios, region in focus, and closing."}</div>
             </div>
-          </div>
-        </div>
-
-        <div className="export-notice">
-          <div className="export-notice-icon">ℹ</div>
-          <div className="export-notice-text">
-            Word and PowerPoint export require the <strong>hosted version</strong> of this app, which includes a file-generation backend. Follow the hosting instructions provided alongside this app to enable them.
-          </div>
+          </button>
         </div>
 
         <div className="export-actions">
@@ -233,7 +269,6 @@ function ExportPanel({ reportText, onDismiss }) {
     </div>
   );
 }
-
 export default function App() {
   const [phase, setPhase] = useState("intro");
   const [currentQ, setCurrentQ] = useState(0);
@@ -560,7 +595,11 @@ const generateReport = async () => {
         .export-option-icon{font-size:18px;flex-shrink:0;margin-top:1px}
         .export-option-label{font-size:13px;font-weight:600;color:var(--white);margin-bottom:3px}
         .export-option-desc{font-size:11px;color:rgba(255,255,255,0.42);line-height:1.5}
-        .export-notice{display:flex;align-items:flex-start;gap:9px;background:rgba(200,168,75,0.07);border:1px solid rgba(200,168,75,0.18);border-radius:10px;padding:11px 13px;margin-bottom:16px}
+        .export-option-btn{display:flex;align-items:flex-start;gap:11px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:11px;padding:12px 14px;cursor:pointer;text-align:left;transition:all .2s;width:100%}
+	.export-option-btn:hover:not(:disabled){background:rgba(255,255,255,0.09);border-color:rgba(200,168,75,0.35)}
+	.export-option-btn:disabled{opacity:.55;cursor:not-allowed}
+	.export-error{background:rgba(183,28,28,0.15);border:1px solid rgba(183,28,28,0.3);border-radius:8px;padding:10px 12px;font-size:12px;color:#FF8A80;margin-bottom:12px}
+	.export-notice{display:flex;align-items:flex-start;gap:9px;background:rgba(200,168,75,0.07);border:1px solid rgba(200,168,75,0.18);border-radius:10px;padding:11px 13px;margin-bottom:16px}
         .export-notice-icon{font-size:13px;color:var(--gold);flex-shrink:0;margin-top:1px}
         .export-notice-text{font-size:12px;color:rgba(255,255,255,0.55);line-height:1.6}
         .export-notice-text strong{color:rgba(200,168,75,0.85);font-weight:600}
@@ -724,9 +763,10 @@ const generateReport = async () => {
               </div>
               {showExport && (
                 <ExportPanel
-                  reportText={report}
-                  onDismiss={() => setShowExport(false)}
-                />
+  						reportText={report}
+  						answers={answers}
+  						onDismiss={() => setShowExport(false)}
+		/>
               )}
             </div>
           )}
