@@ -193,7 +193,10 @@ function ExportPanel({ reportText, answers, onDismiss }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ report: reportText, topic: answers.topic, region: answers.region }),
       });
-      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`Export failed (${res.status})${body ? ": " + body : ""}`);
+      }
       const blob = new Blob([await res.arrayBuffer()], { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

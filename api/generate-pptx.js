@@ -30,6 +30,7 @@ function blurb(lines, max = 320) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
+  try {
   const raw = await new Promise((resolve, reject) => {
     let d = ""; req.on("data", c => d += c); req.on("end", () => resolve(d)); req.on("error", reject);
   });
@@ -91,4 +92,7 @@ export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
   res.setHeader("Content-Disposition", `attachment; filename="foresight-report.pptx"`);
   res.status(200).send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 }
