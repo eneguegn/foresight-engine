@@ -195,16 +195,12 @@ function ExportPanel({ reportText, answers, onDismiss }) {
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
       const blob = new Blob([await res.arrayBuffer()], { type: mimeType });
-      const file = new File([blob], filename, { type: mimeType });
-
-      // Use Web Share API on iOS (best experience), fallback to new tab
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: filename });
-      } else {
-        const url = URL.createObjectURL(blob);
-        window.open(url, "_blank");
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
-      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch (err) {
       if (err.name !== "AbortError") setExportError(err.message);
     }
@@ -280,6 +276,9 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [showExport, setShowExport] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [formValues, setFormValues] = useState(() =>
+    Object.fromEntries(QUESTIONS.map(q => [q.id, ""]))
+  );
 
   const inputRef = useRef(null);
   const streamRef = useRef("");
@@ -308,6 +307,12 @@ export default function App() {
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAnswer(); }
+  };
+
+  const handleFormSubmit = () => {
+    if (!QUESTIONS.every(q => formValues[q.id].trim())) return;
+    setAnswers(Object.fromEntries(QUESTIONS.map(q => [q.id, formValues[q.id].trim()])));
+    setPhase("confirm");
   };
 
 const generateReport = async () => {
@@ -394,8 +399,9 @@ const generateReport = async () => {
   const restart = () => {
     setPhase("intro"); setCurrentQ(0); setAnswers({});
     setInputVal(""); setAckText(""); setReport("");
-    setError(""); setProgress(0);
-    setShowExport(false); streamRef.current = "";
+    setError(""); setProgress(0); setShowExport(false);
+    setFormValues(Object.fromEntries(QUESTIONS.map(q => [q.id, ""])));
+    streamRef.current = "";
   };
 
   const handleCopyToolbar = () => {
@@ -519,6 +525,18 @@ const generateReport = async () => {
         .send-btn:hover{transform:scale(1.06);box-shadow:0 2px 10px rgba(200,168,75,0.4)}
         .send-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
 
+        /* FORM */
+        .form-screen{flex:1;overflow-y:auto;padding:22px 20px 32px;animation:fadeUp .38s ease both}
+        .form-heading{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--white);margin-bottom:5px}
+        .form-sub{font-size:13px;color:rgba(255,255,255,0.42);margin-bottom:22px;line-height:1.55}
+        .form-fields{display:flex;flex-direction:column;gap:18px;margin-bottom:22px}
+        .form-field-label{font-size:10px;color:var(--gold);letter-spacing:.12em;text-transform:uppercase;font-weight:600;margin-bottom:5px}
+        .form-field-q{font-size:14px;color:var(--white);font-weight:600;margin-bottom:4px;line-height:1.4}
+        .form-field-hint{font-size:11px;color:rgba(255,255,255,0.35);font-style:italic;line-height:1.5;margin-bottom:8px}
+        .form-field-input{width:100%;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.11);border-radius:11px;padding:10px 13px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--white);outline:none;transition:border-color .2s;resize:none;display:block;box-sizing:border-box}
+        .form-field-input:focus{border-color:rgba(200,168,75,0.42);background:rgba(255,255,255,0.08)}
+        .form-field-input::placeholder{color:rgba(255,255,255,0.26)}
+
         /* CONFIRM */
         .confirm-screen{flex:1;padding:22px 20px 28px;overflow-y:auto;animation:fadeUp .38s ease both}
         .confirm-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--white);margin-bottom:5px}
@@ -623,7 +641,7 @@ const generateReport = async () => {
             <div className="header-title">Strategic Foresight Engine</div>
             <div className="header-sub">Three Scenarios · Ten-Year Horizon</div>
           </div>
-          {(phase === "confirm" || phase === "report" || phase === "error") && (
+          {(phase === "form" || phase === "confirm" || phase === "report" || phase === "error") && (
             <button className="restart-btn" onClick={restart}>↺ New Report</button>
           )}
         </header>
@@ -644,7 +662,7 @@ const generateReport = async () => {
               <div className="intro-flow">
                 <div className="flow-step">
                   <div className="flow-num">1</div>
-                  <div className="flow-text"><strong>7 scoping questions</strong> — topic, region, stakeholders, organisation type, and target length</div>
+                  <div className="flow-text"><strong>One form</strong> — topic, region, stakeholders, organisation type, and target length</div>
                 </div>
                 <div className="flow-step">
                   <div className="flow-num">2</div>
@@ -655,34 +673,59 @@ const generateReport = async () => {
                   <div className="flow-text"><strong>Export to Word or PowerPoint</strong> — offered once your report is complete</div>
                 </div>
               </div>
-              <button className="primary-btn" onClick={() => setPhase("intake")}>Begin Your Report →</button>
+              <button className="primary-btn" onClick={() => setPhase("form")}>Begin Your Report →</button>
             </div>
           )}
 
-          {/* INTAKE */}
-          {phase === "intake" && (
-            <div className="intake-screen">
-              <div className="progress-track">
-                {QUESTIONS.map((_, i) => (
-                  <div key={i} className={`progress-pip ${i < currentQ ? "done" : i === currentQ ? "active" : ""}`} />
+          {/* FORM */}
+          {phase === "form" && (
+            <div className="form-screen">
+              <div className="form-heading">Your Report Brief</div>
+              <p className="form-sub">Complete all fields below, then generate your report.</p>
+              <div className="form-fields">
+                {QUESTIONS.map(q => (
+                  <div key={q.id}>
+                    <div className="form-field-label">{q.label}</div>
+                    <div className="form-field-q">{q.question}</div>
+                    <div className="form-field-hint">{q.hint}</div>
+                    {q.id === "pages" ? (
+                      <input
+                        type="number"
+                        className="form-field-input"
+                        placeholder={q.placeholder}
+                        value={formValues[q.id]}
+                        onChange={e => setFormValues(v => ({ ...v, [q.id]: e.target.value }))}
+                        min="5"
+                        max="40"
+                      />
+                    ) : (
+                      <textarea
+                        className="form-field-input"
+                        placeholder={q.placeholder}
+                        value={formValues[q.id]}
+                        onChange={e => setFormValues(v => ({ ...v, [q.id]: e.target.value }))}
+                        rows={2}
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
-              <div className="question-card" key={currentQ}>
-                <div className="question-label">{QUESTIONS[currentQ].label}</div>
-                <div className="question-text">{QUESTIONS[currentQ].question}</div>
-                <div className="question-hint">{QUESTIONS[currentQ].hint}</div>
-              </div>
-              {ackText && <div className="ack-bubble">{ackText}</div>}
-              {!ackText && (
-                <div className="input-area">
-                  <div className="input-wrapper">
-                    <textarea ref={inputRef} className="text-input" rows={1} value={inputVal}
-                      onChange={e => setInputVal(e.target.value)} onKeyDown={handleKeyDown}
-                      placeholder={QUESTIONS[currentQ].placeholder} />
-                    <button className="send-btn" onClick={handleAnswer} disabled={!inputVal.trim()}>→</button>
-                  </div>
+              <div className="confirm-output-note" style={{marginBottom:18}}>
+                <div className="confirm-output-note-icon">📋</div>
+                <div className="confirm-output-note-text">
+                  Your report will be <strong>written here first</strong> so you can read it immediately. Once complete, you'll be offered the option to export as a <strong>Word document</strong> or <strong>PowerPoint deck</strong>.
                 </div>
-              )}
+              </div>
+              <div className="confirm-actions">
+                <button className="secondary-btn" onClick={restart}>Start Over</button>
+                <button
+                  className="generate-btn"
+                  onClick={handleFormSubmit}
+                  disabled={!QUESTIONS.every(q => formValues[q.id].trim())}
+                >
+                  Review & Generate →
+                </button>
+              </div>
             </div>
           )}
 
