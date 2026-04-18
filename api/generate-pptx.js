@@ -86,7 +86,8 @@ export default async function handler(req, res) {
   s7.addText("ONE REPORT.",      { x:1, y:2.8,  w:8, h:0.95, fontSize:40, bold:true, color:WHITE, fontFace:"Calibri", align:"center" });
   s7.addText(`${topic || "Strategic Foresight"}  ·  ${region || ""}  ·  ${new Date().getFullYear()}`, { x:1, y:4.1, w:8, h:0.4, fontSize:13, color:MID, fontFace:"Calibri", italic:true, align:"center" });
 
-  const buffer = await pres.write({ outputType: "nodebuffer" });
+  const arrayBuffer = await pres.write({ outputType: "arraybuffer" });
+  const buffer = Buffer.from(arrayBuffer);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
   res.setHeader("Content-Disposition", `attachment; filename="foresight-report.pptx"`);
   res.status(200).send(buffer);
