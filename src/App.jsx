@@ -236,9 +236,17 @@ function ExportPanel({ reportText, answers, onDismiss }) {
         const key = Object.keys(sections).find(k => k.toUpperCase().includes(kw.toUpperCase()));
         return key ? sections[key] : [];
       };
-      const blurb = (arr, max = 320) => {
-        const t = arr.join(" ").replace(/\*\*/g, "").replace(/\*/g, "");
-        return t.length > max ? t.slice(0, max).trim() + "…" : t;
+      const blurb = (arr, max = 600) => {
+        const t = arr.join(" ").replace(/\*\*/g, "").replace(/\*/g, "").replace(/\s+/g, " ").trim();
+        if (t.length <= max) return t;
+        // Always end on a complete sentence
+        const sentences = t.match(/[^.!?]+[.!?]+/g) || [];
+        let out = "";
+        for (const s of sentences) {
+          if (out.length + s.length > max) break;
+          out += s;
+        }
+        return out.trim() || t.slice(0, max).trim() + "…";
       };
 
       const pres = new pptxgen();
@@ -258,7 +266,7 @@ function ExportPanel({ reportText, answers, onDismiss }) {
       s1.addText("Three Scenarios  ·  Ten-Year Horizon", { x:0.45, y:3.2, w:9, h:0.4, fontSize:13, color:MID, fontFace:"Calibri" });
 
       const s2 = lightSlide("Executive Summary");
-      s2.addText(blurb(findSection("EXECUTIVE"), 420), { x:0.5, y:0.95, w:9, h:1.9, fontSize:13, color:"2D3748", fontFace:"Calibri", valign:"top" });
+      s2.addText(blurb(findSection("EXECUTIVE"), 650), { x:0.5, y:0.95, w:9, h:1.9, fontSize:13, color:"2D3748", fontFace:"Calibri", valign:"top" });
       [["OPTIMISTIC","~25%",GREEN],["BASELINE","~50%",BLUE],["DISRUPTIVE","~25%",RED]].forEach(([lbl,prob,col],i) => {
         const x = 0.5 + i * 3.1;
         s2.addShape(pres.ShapeType.rect, { x, y:3.05, w:2.9, h:2.1, fill:{color:col}, line:{color:col} });
@@ -273,11 +281,11 @@ function ExportPanel({ reportText, answers, onDismiss }) {
         s.addShape(pres.ShapeType.rect, { x:0, y:0,    w:10, h:0.07, fill:{color:col}, line:{color:col} });
         s.addShape(pres.ShapeType.rect, { x:0, y:0.07, w:10, h:0.63, fill:{color:col}, line:{color:col} });
         s.addText(label, { x:0.4, y:0.13, w:9.2, h:0.5, fontSize:18, bold:true, color:WHITE, fontFace:"Calibri" });
-        s.addText(blurb(findSection(key), 520), { x:0.4, y:0.88, w:9.2, h:4.4, fontSize:13, color:"2D3748", fontFace:"Calibri", valign:"top" });
+        s.addText(blurb(findSection(key), 1200), { x:0.4, y:0.88, w:9.2, h:4.4, fontSize:13, color:"2D3748", fontFace:"Calibri", valign:"top" });
       });
 
       const s6 = lightSlide(`${answers.region || "Region"} in Focus`);
-      s6.addText(blurb(findSection("FOCUS"), 520), { x:0.5, y:0.95, w:9, h:4.3, fontSize:13, color:"2D3748", fontFace:"Calibri", valign:"top" });
+      s6.addText(blurb(findSection("FOCUS"), 1200), { x:0.5, y:0.95, w:9, h:4.3, fontSize:13, color:"2D3748", fontFace:"Calibri", valign:"top" });
 
       const s7 = darkSlide();
       s7.addShape(pres.ShapeType.rect, { x:0, y:5.38, w:10, h:0.245, fill:{color:GOLD}, line:{color:GOLD} });
